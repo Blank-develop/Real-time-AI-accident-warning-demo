@@ -45,6 +45,20 @@
         @keyframes loadBar { from{width:0} to{width:100%} }
         .load-status { font-size: 11px; color: #2a3a58; font-family: monospace; min-height: 16px; }
 
+        .start-btn {
+            margin-top: 8px;
+            padding: 12px 36px; border-radius: 50px; border: none; cursor: pointer;
+            background: linear-gradient(135deg,#3b82f6,#38beff);
+            color: #fff; font-size: 15px; font-weight: 700;
+            box-shadow: 0 0 24px rgba(56,190,255,.4);
+            animation: pulse-btn 1.8s ease-in-out infinite;
+            display: none;
+        }
+        @keyframes pulse-btn {
+            0%,100% { transform: scale(1);   box-shadow: 0 0 24px rgba(56,190,255,.4); }
+            50%      { transform: scale(1.05); box-shadow: 0 0 36px rgba(56,190,255,.7); }
+        }
+
         /* ── HEADER ───────────────────────────────────────── */
         .header {
             flex-shrink: 0;
@@ -321,6 +335,7 @@
     <div class="load-sub">ກຳລັງດາວໂຫຼດ...</div>
     <div class="load-bar-wrap"><div class="load-bar"></div></div>
     <div class="load-status" id="loadStatus">Connecting to cameras...</div>
+    <button class="start-btn" id="startBtn" onclick="startApp()">▶ ແຕະເພື່ອເລີ່ມ</button>
 </div>
 
 <!-- BOTTOM-RIGHT NOTIFICATION STACK -->
@@ -443,14 +458,22 @@ let lmIdx = 0;
 const lmInt = setInterval(() => {
     lmIdx++;
     if (lmIdx < loadMsgs.length) document.getElementById('loadStatus').textContent = loadMsgs[lmIdx];
-    if (lmIdx >= loadMsgs.length - 1) clearInterval(lmInt);
+    if (lmIdx >= loadMsgs.length - 1) {
+        clearInterval(lmInt);
+        // Show start button after loading completes
+        document.getElementById('startBtn').style.display = 'block';
+    }
 }, 600);
 
-setTimeout(() => {
+function startApp() {
+    // Play and immediately pause to unlock audio on this user gesture
+    notifSound.play().then(() => notifSound.pause()).catch(() => {});
+    notifSound.currentTime = 0;
+
     document.getElementById('loadScreen').classList.add('gone');
     loadDone = true;
     setTimeout(() => sendAlert(), 3000);
-}, 3000);
+}
 
 /* ─── Clock ──────────────────────────────────── */
 setInterval(() => {

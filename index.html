@@ -470,6 +470,8 @@ setInterval(() => {
 }, 1000);
 
 /* ─── Send alert ─────────────────────────────── */
+const notifSound = new Audio('sound.wav');
+
 function sendAlert() {
     let idx;
     do { idx = Math.floor(Math.random() * ALERTS.length); } while (idx === lastIdx);
@@ -480,6 +482,8 @@ function sendAlert() {
         removeTyping();
         appendCard(a);
         showNotifPopup(a);
+        notifSound.currentTime = 0;
+        notifSound.play().catch(() => {});
     }, 1100);
 }
 

@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LoungSy.AI — Real-time Accident Warning System</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #060b18;
+            color: #dde6f5;
+            height: 100dvh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── LOADING ──────────────────────────────────────── */
+        .loading-screen {
+            position: fixed; inset: 0; z-index: 999;
+            background: #060b18;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 14px;
+            transition: opacity .6s, visibility .6s;
+        }
+        .loading-screen.gone { opacity: 0; visibility: hidden; }
+
+        .load-logo { font-size: 52px; animation: float 2s ease-in-out infinite; }
+        @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+
+        .load-title {
+            font-size: 26px; font-weight: 800;
+            background: linear-gradient(135deg,#38beff,#3b82f6);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .load-sub { font-size: 18px; color: #445577; text-align: center; padding: 0 32px; }
+
+        .load-bar-wrap { width: 220px; height: 3px; background: #141e33; border-radius: 3px; overflow: hidden; }
+        .load-bar {
+            height: 100%; background: linear-gradient(90deg,#38beff,#3b82f6);
+            border-radius: 3px; animation: loadBar 3s ease-out forwards;
+        }
+        @keyframes loadBar { from{width:0} to{width:100%} }
+        .load-status { font-size: 11px; color: #2a3a58; font-family: monospace; min-height: 16px; }
+
+        /* ── HEADER ───────────────────────────────────────── */
+        .header {
+            flex-shrink: 0;
+            height: 56px;
+            background: #0a1020;
+            border-bottom: 1px solid #161f35;
+            padding: 0 16px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .brand { display: flex; align-items: center; gap: 10px; }
+        .brand-icon {
+            width: 36px; height: 36px; border-radius: 9px;
+            overflow: hidden; flex-shrink: 0;
+            box-shadow: 0 0 14px rgba(59,130,246,.35);
+        }
+        .brand-icon img { width: 100%; height: 100%; object-fit: cover; }
+        .brand-name {
+            font-size: 17px; font-weight: 800;
+            background: linear-gradient(135deg,#38beff,#3b82f6);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .brand-tag { font-size: 9px; color: #334466; margin-top: -2px; }
+
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .live-pill {
+            display: flex; align-items: center; gap: 5px;
+            background: rgba(255,60,60,.12); border: 1px solid rgba(255,60,60,.25);
+            padding: 4px 10px; border-radius: 20px;
+            font-size: 11px; font-weight: 700; color: #ff4d4d;
+        }
+        .live-dot { width: 6px; height: 6px; background: #ff4d4d; border-radius: 50%; animation: blink 1.4s infinite; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+        .clock { font-size: 13px; color: #7a8aaa; font-variant-numeric: tabular-nums; }
+
+        /* ── CHAT PANEL ───────────────────────────────────── */
+        .chat-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+        .chat-head {
+            flex-shrink: 0;
+            padding: 10px 16px;
+            background: #0a1020;
+            border-bottom: 1px solid #161f35;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .chat-head-left { display: flex; align-items: center; gap: 10px; }
+        .ai-bubble {
+            width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+            background: linear-gradient(135deg,#6d28d9,#4f46e5);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 17px; box-shadow: 0 0 10px rgba(109,40,217,.4);
+        }
+        .ch-name { font-size: 13px; font-weight: 700; }
+        .ch-status { font-size: 10px; color: #00e676; display: flex; align-items: center; gap: 4px; }
+        .online-dot { width: 5px; height: 5px; background: #00e676; border-radius: 50%; }
+        .chat-head-meta { text-align: right; font-size: 10px; color: #334466; line-height: 1.7; }
+
+        .messages {
+            flex: 1; overflow-y: auto; padding: 16px 20px;
+            display: flex; flex-direction: column; gap: 14px;
+            scroll-behavior: smooth; min-height: 0;
+            -webkit-overflow-scrolling: touch;
+        }
+        .messages::-webkit-scrollbar { width: 3px; }
+        .messages::-webkit-scrollbar-thumb { background: #161f35; border-radius: 3px; }
+
+        .sys-msg {
+            text-align: center; font-size: 11px; color: #2a3a58;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .sys-msg::before,.sys-msg::after { content:''; flex:1; height:1px; background:#111827; }
+
+        /* ── ALERT MESSAGE ROW ────────────────────────────── */
+        .msg-row {
+            display: flex; gap: 10px;
+            animation: popSlide .4s cubic-bezier(.34,1.56,.64,1);
+        }
+        @keyframes popSlide {
+            from { opacity:0; transform:translateX(30px) scale(.95); }
+            to   { opacity:1; transform:translateX(0) scale(1); }
+        }
+
+        .msg-icon {
+            width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+            margin-top: 2px; display: flex; align-items: center;
+            justify-content: center; font-size: 14px;
+        }
+
+        .alert-card {
+            flex: 1; min-width: 0; max-width: 50vw;
+            background: #0a1120; border: 1px solid #1a2540; border-radius: 14px; overflow: hidden;
+        }
+        .alert-card.sev-critical { border-color: rgba(255,77,77,.4);  box-shadow: 0 0 24px rgba(255,77,77,.1); }
+        .alert-card.sev-warning  { border-color: rgba(255,170,0,.35); box-shadow: 0 0 24px rgba(255,170,0,.08); }
+
+        .card-img-wrap { position: relative; }
+        .card-img-wrap img { width:100%; height:auto; display:block; }
+        .img-grad { position:absolute; inset:0; background:linear-gradient(transparent 35%,rgba(6,11,24,.85) 100%); }
+
+        .type-badge {
+            position: absolute; top: 10px; left: 10px;
+            padding: 4px 11px; border-radius: 20px;
+            font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px;
+        }
+        .badge-red { background:rgba(255,55,55,.9);  color:#fff; }
+        .badge-ora { background:rgba(255,110,0,.9);  color:#fff; }
+        .badge-yel { background:rgba(255,170,0,.95); color:#000; }
+
+        .ai-tag {
+            position: absolute; top: 10px; right: 10px;
+            background: rgba(0,0,0,.72); border: 1px solid rgba(255,255,255,.14);
+            padding: 2px 7px; border-radius: 4px;
+            font-size: 9px; color: #99aabb; font-family: monospace;
+        }
+
+        .card-body { padding: 12px 14px; }
+        .card-title { font-size: 15px; font-weight: 800; margin-bottom: 7px; }
+        .meta-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+        .meta-tag {
+            display: flex; align-items: center; gap: 3px;
+            background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+            padding: 3px 8px; border-radius: 6px; font-size: 10px; color: #556688;
+        }
+        .meta-tag.loc { color: #38beff; border-color: rgba(56,190,255,.2); }
+        .meta-tag.tim { color: #8899bb; }
+        .meta-tag.acc { color: #00e676; border-color: rgba(0,230,118,.2); }
+
+        .card-desc { font-size: 11px; color: #4a5e7f; line-height: 1.55; margin-bottom: 8px; }
+
+        .action-note {
+            font-size: 11px; line-height: 1.5;
+            padding: 6px 10px; border-radius: 6px;
+            border-left: 3px solid; margin-bottom: 10px;
+        }
+
+        .btn-row { display: flex; gap: 6px; }
+        .btn {
+            flex: 1; padding: 8px 8px; border-radius: 8px;
+            font-size: 11px; font-weight: 700; border: none; cursor: pointer;
+            transition: transform .15s, filter .15s; white-space: nowrap;
+        }
+        .btn:hover { transform: translateY(-1px); filter: brightness(1.1); }
+        .btn:active { transform: scale(.96); }
+        .btn-main { color: #fff; }
+        .btn-sec  { background: rgba(255,255,255,.06); color: #7a8aaa; border: 1px solid rgba(255,255,255,.1); }
+        .btn-dim  { background: transparent; color: #334466; border: 1px solid #161f35; }
+
+        .msg-ts { font-size: 10px; color: #293550; margin-top: 5px; text-align: right; }
+
+        /* Typing */
+        .typing-row { display:flex; gap:8px; align-items:flex-end; }
+        .typing-bubble {
+            background:#0a1120; border:1px solid #1a2540;
+            padding:10px 13px; border-radius:11px;
+            display:flex; gap:4px; align-items:center;
+        }
+        .t-dot { width:5px; height:5px; border-radius:50%; background:#3a4a6a; animation:tBounce 1.1s ease-in-out infinite; }
+        .t-dot:nth-child(2){animation-delay:.18s} .t-dot:nth-child(3){animation-delay:.36s}
+        @keyframes tBounce { 0%,100%{transform:translateY(0);opacity:.4} 50%{transform:translateY(-5px);opacity:1} }
+
+        /* ── BOTTOM-RIGHT APP NOTIFICATION ───────────────── */
+        .notif-stack {
+            position: fixed;
+            bottom: 24px; right: 24px;
+            z-index: 300;
+            display: flex; flex-direction: column-reverse; gap: 10px;
+            pointer-events: none;
+        }
+
+        .notif-popup {
+            width: 320px;
+            background: #111927;
+            border: 1px solid #1e2d44;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.04);
+            pointer-events: all;
+            animation: notifIn .4s cubic-bezier(.34,1.56,.64,1);
+            transition: opacity .3s, transform .3s;
+        }
+        .notif-popup.hiding {
+            opacity: 0;
+            transform: translateX(30px) scale(.96);
+        }
+        @keyframes notifIn {
+            from { opacity:0; transform: translateX(60px) scale(.9); }
+            to   { opacity:1; transform: translateX(0) scale(1); }
+        }
+
+        .notif-body {
+            padding: 11px 13px 13px;
+        }
+
+        .notif-top {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        .notif-app {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 10px; color: #445566; font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+        }
+        .notif-app-icon {
+            width: 16px; height: 16px; border-radius: 4px;
+            overflow: hidden; flex-shrink: 0;
+        }
+        .notif-app-icon img { width: 100%; height: 100%; object-fit: cover; }
+        .notif-time { font-size: 10px; color: #2a3a58; }
+
+        .notif-close {
+            background: none; border: none; cursor: pointer;
+            color: #334466; font-size: 14px; line-height: 1;
+            padding: 2px 4px; border-radius: 4px;
+            transition: color .2s, background .2s;
+        }
+        .notif-close:hover { color: #aaa; background: rgba(255,255,255,.06); }
+
+        .notif-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 8px; border-radius: 10px;
+            font-size: 10px; font-weight: 800; text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .nb-red { background: rgba(255,55,55,.15);  color: #ff6060; border: 1px solid rgba(255,55,55,.25); }
+        .nb-ora { background: rgba(255,110,0,.15);  color: #ff8844; border: 1px solid rgba(255,110,0,.25); }
+        .nb-yel { background: rgba(255,170,0,.15);  color: #ffbb33; border: 1px solid rgba(255,170,0,.25); }
+
+        .notif-title { font-size: 13px; font-weight: 800; margin-bottom: 3px; }
+        .notif-desc  { font-size: 11px; color: #4a5e7f; line-height: 1.45; }
+
+        .notif-actions {
+            display: flex; gap: 6px; margin-top: 10px;
+        }
+        .notif-btn {
+            flex: 1; padding: 7px 8px; border-radius: 8px;
+            font-size: 11px; font-weight: 700; border: none; cursor: pointer;
+            transition: filter .15s;
+        }
+        .notif-btn:hover { filter: brightness(1.1); }
+        .notif-btn.primary { color: #fff; }
+        .notif-btn.secondary { background: rgba(255,255,255,.07); color: #7a8aaa; border: 1px solid rgba(255,255,255,.1); }
+
+        /* Bottom bar */
+        .bottom-bar {
+            flex-shrink: 0;
+            padding: 6px 16px;
+            background: #0a1020; border-top: 1px solid #161f35;
+            display: flex; align-items: center; justify-content: space-between;
+            font-size: 10px; color: #2a3a58;
+        }
+        .ai-online { display:flex; align-items:center; gap:4px; color:#00e676; }
+
+        /* ── MOBILE ≤ 700px ───────────────────────────────── */
+        @media (max-width: 700px) {
+            .brand-tag  { display: none; }
+            .clock      { display: none; }
+            .chat-head-meta { display: none; }
+            .alert-card { max-width: 100%; }
+            .messages   { padding: 10px 12px; }
+
+            .notif-stack { bottom: auto; top: 64px; right: 12px; left: 12px; flex-direction: column; }
+            .notif-popup { width: 100%; }
+        }
+
+        @media (max-width: 400px) {
+            .btn { font-size: 10px; padding: 7px 4px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div class="loading-screen" id="loadScreen">
+    <div class="load-logo"><img src="logo.png" style="width:140px;height:140px;object-fit:contain;border-radius:24px;"></div>
+    <div class="load-title">LoungSy.AI</div>
+    <div class="load-sub">ກຳລັງດາວໂຫຼດ...</div>
+    <div class="load-bar-wrap"><div class="load-bar"></div></div>
+    <div class="load-status" id="loadStatus">Connecting to cameras...</div>
+</div>
+
+<!-- BOTTOM-RIGHT NOTIFICATION STACK -->
+<div class="notif-stack" id="notifStack"></div>
+
+<!-- HEADER -->
+<div class="header">
+    <div class="brand">
+        <div class="brand-icon"><img src="logo.png" alt="LoungSy.AI"></div>
+        <div>
+            <div class="brand-name">LoungSy.AI</div>
+            <div class="brand-tag">Real-time Accident Warning</div>
+        </div>
+    </div>
+    <div class="header-right">
+        <div class="live-pill"><div class="live-dot"></div>LIVE</div>
+        <div class="clock" id="clock">--:--:--</div>
+    </div>
+</div>
+
+<!-- CHAT -->
+<div class="chat-panel">
+    <div class="chat-head">
+        <div class="chat-head-left">
+            <div class="ai-bubble">🤖</div>
+            <div>
+                <div class="ch-name">LoungSy.AI Monitor</div>
+                <div class="ch-status"><div class="online-dot"></div>Active · All zones monitored</div>
+            </div>
+        </div>
+        <div class="chat-head-meta">
+            <div>YOLOv8-nano + DeepFace</div>
+            <div>Accuracy 98.7% · 30 fps</div>
+        </div>
+    </div>
+
+    <div class="messages" id="messages">
+        <div class="sys-msg">Session started — AI monitoring active</div>
+    </div>
+
+    <div class="bottom-bar">
+        <div style="display:flex;align-items:center;gap:6px">
+            <div class="ai-online"><div class="online-dot"></div>AI Online</div>
+            · 4 cameras · 30 fps
+        </div>
+        <div>Next scan <span id="nextScan">5</span>s</div>
+    </div>
+</div>
+
+<script>
+/* ─── Image pools ────────────────────────────── */
+const IMAGES = {
+    fire:     ['fire/fire1.png','fire/fire2.png','fire/fire3.png','fire/fire4.png'],
+    stranger: ['stranger/stranger1.png','stranger/stranger2.png','stranger/stranger3.png','stranger/strager4.png'],
+    falling:  ['falling/falling1.png','falling/falling2.png','falling/falling3.png','falling/falling4.png'],
+};
+function pickImg(id) {
+    const a = IMAGES[id];
+    return a[Math.floor(Math.random() * a.length)];
+}
+
+/* ─── Alert data ─────────────────────────────── */
+const ALERTS = [
+    {
+        id: 'fire',
+        type: 'ໄຟໄໝ້', sev: 'critical',
+        badgeClass: 'badge-red', notifBadge: 'nb-red',
+        icon: '🔥', emoji: '🔥',
+        camName: 'ໂຮງອາຫານ',
+        title: 'ກວດພົບປະກາຍໄຟເກີດຂຶ້ນ',
+        desc: 'ກວດພົບອຸນຫະພູມທີ່ສູງຂຶ້ນຢ່າງວ່ອງໄວແລະກວດພົບເປວໄຟສີແດງທີ່ຮ້ອນຂຶ້ນ. ໃຫ້ດໍາເນີນການກວດສອບຢ່າງໄວ!',
+        action: '🚨 Emergency services notified. Evacuate immediately via nearest exit!',
+        acColor: '#ff4d4d', acBg: 'rgba(255,77,77,.08)',
+        btnMain: 'Call 911', btnSec: 'View Camera', btnDim: 'Dismiss',
+        btnGrad: 'linear-gradient(135deg,#ff4d4d,#cc1a1a)',
+    },
+    {
+        id: 'stranger',
+        type: 'ກວດຈັບຄົນແປກໜ້າ', sev: 'warning',
+        badgeClass: 'badge-yel', notifBadge: 'nb-yel',
+        icon: '👤', emoji: '🚷',
+        camName: 'ປະຕູໜ້າ',
+        title: 'ກວດພົບຄົນບໍ່ຮູ້ຈັກເຂົ້າມາໃນເຮືອນ',
+        desc: 'ກວດຈັບຄົນແປກໜ້າແລະມີທ່າທີໜ້າສົງໄສກໍາລັງບຸກລຸກເຂົ້າເຮືອນຂອງທ່ານ. ກະລຸນາກວດສອບໂດຍໄວ!',
+        action: '🔒 Access denied. Security team alerted. Clip saved to cloud.',
+        acColor: '#ffaa00', acBg: 'rgba(255,170,0,.08)',
+        btnMain: 'ລັອກປະຕູບ້ານ', btnSec: 'View Camera', btnDim: 'Dismiss',
+        btnGrad: 'linear-gradient(135deg,#ffaa00,#cc7700)',
+    },
+    {
+        id: 'falling',
+        type: 'ກວດຈັບຄົນລົ້ມ', sev: 'critical',
+        badgeClass: 'badge-ora', notifBadge: 'nb-ora',
+        icon: '🚨', emoji: '⚠️',
+        camName: 'ຫ້ອງຮັບແຂກ',
+        title: 'ມີຄົນໝົດສະຕິລົ້ມລົງ',
+        desc: 'ກ້ອງໄດ້ຈັບພາບມີຄົນລົ້ມລົງຢ່າງກະທັນຫັນແລະອາດເກີດມີອາການບາດເຈັບ.',
+        action: '🏥 Emergency medical services notified. Contacting family now.',
+        acColor: '#ff7722', acBg: 'rgba(255,119,34,.08)',
+        btnMain: 'ໂທຫາ 911', btnSec: 'View Camera', btnDim: 'Dismiss',
+        btnGrad: 'linear-gradient(135deg,#ff7722,#cc4400)',
+    },
+];
+
+/* ─── State ──────────────────────────────────── */
+// Intervals cycle: 3s → 5s → 10s → 3s → ...
+const INTERVALS = [3, 5, 10];
+let intervalIdx = 0;
+let countdown = INTERVALS[0], loadDone = false, lastIdx = -1;
+
+/* ─── Loading ────────────────────────────────── */
+const loadMsgs = [
+    'Connecting to cameras...',
+    'Loading AI models (YOLOv8)...',
+    'Calibrating sensors...',
+    'Running self-diagnostics...',
+    'All systems go ✓',
+];
+let lmIdx = 0;
+const lmInt = setInterval(() => {
+    lmIdx++;
+    if (lmIdx < loadMsgs.length) document.getElementById('loadStatus').textContent = loadMsgs[lmIdx];
+    if (lmIdx >= loadMsgs.length - 1) clearInterval(lmInt);
+}, 600);
+
+setTimeout(() => {
+    document.getElementById('loadScreen').classList.add('gone');
+    loadDone = true;
+    setTimeout(() => sendAlert(), 3000);
+}, 3000);
+
+/* ─── Clock ──────────────────────────────────── */
+setInterval(() => {
+    document.getElementById('clock').textContent = new Date().toLocaleTimeString();
+}, 1000);
+
+/* ─── Countdown + auto alerts ────────────────── */
+setInterval(() => {
+    if (!loadDone) return;
+    countdown--;
+    if (countdown <= 0) {
+        intervalIdx = (intervalIdx + 1) % INTERVALS.length;
+        countdown = INTERVALS[intervalIdx];
+        sendAlert();
+    }
+    document.getElementById('nextScan').textContent = countdown;
+}, 1000);
+
+/* ─── Send alert ─────────────────────────────── */
+function sendAlert() {
+    let idx;
+    do { idx = Math.floor(Math.random() * ALERTS.length); } while (idx === lastIdx);
+    lastIdx = idx;
+    const a = ALERTS[idx];
+    showTyping();
+    setTimeout(() => {
+        removeTyping();
+        appendCard(a);
+        showNotifPopup(a);
+    }, 1100);
+}
+
+/* ─── Typing indicator ───────────────────────── */
+function showTyping() {
+    const feed = document.getElementById('messages');
+    const d = document.createElement('div');
+    d.id = 'typing'; d.className = 'typing-row';
+    d.innerHTML = `
+        <div class="msg-icon" style="background:linear-gradient(135deg,#6d28d9,#4f46e5)">🤖</div>
+        <div class="typing-bubble">
+            <div class="t-dot"></div><div class="t-dot"></div><div class="t-dot"></div>
+        </div>`;
+    feed.appendChild(d);
+    feed.scrollTop = feed.scrollHeight;
+}
+function removeTyping() {
+    const t = document.getElementById('typing');
+    if (t) t.remove();
+}
+
+/* ─── Append chat card ───────────────────────── */
+function appendCard(a) {
+    const feed = document.getElementById('messages');
+    const now  = new Date().toLocaleTimeString();
+    const conf = (88 + Math.random() * 11).toFixed(1) + '%';
+    const img  = pickImg(a.id);
+
+    const iconBg = a.sev === 'critical'
+        ? 'linear-gradient(135deg,#ff4d4d,#cc1a1a)'
+        : 'linear-gradient(135deg,#ffaa00,#cc7700)';
+
+    const div = document.createElement('div');
+    div.className = 'msg-row';
+    div.innerHTML = `
+        <div class="msg-icon" style="background:${iconBg}">${a.emoji}</div>
+        <div style="flex:1;min-width:0">
+            <div class="alert-card sev-${a.sev}">
+                <div class="card-img-wrap">
+                    <img src="${img}" alt="${a.type}" loading="lazy">
+                    <div class="img-grad"></div>
+                    <div class="type-badge ${a.badgeClass}">${a.icon} ${a.type}</div>
+                    <div class="ai-tag">AI · ${conf}</div>
+                </div>
+                <div class="card-body">
+                    <div class="card-title" style="color:${a.acColor}">${a.title}</div>
+                    <div class="meta-row">
+                        <div class="meta-tag loc">📍 ${a.camName}</div>
+                        <div class="meta-tag tim">🕐 ${now}</div>
+                        <div class="meta-tag acc">✓ ${conf}</div>
+                    </div>
+                    <div class="card-desc">${a.desc}</div>
+                    <div class="action-note" style="color:${a.acColor};background:${a.acBg};border-color:${a.acColor}">
+                        ${a.action}
+                    </div>
+                    <div class="btn-row">
+                        <button class="btn btn-main" style="background:${a.btnGrad}">${a.btnMain}</button>
+                        <button class="btn btn-sec">${a.btnSec}</button>
+                        <button class="btn btn-dim">${a.btnDim}</button>
+                    </div>
+                </div>
+            </div>
+            <div class="msg-ts">LoungSy.AI · ${now}</div>
+        </div>`;
+    feed.appendChild(div);
+    feed.scrollTop = feed.scrollHeight;
+}
+
+/* ─── Bottom-right app notification popup ────── */
+function showNotifPopup(a) {
+    const stack = document.getElementById('notifStack');
+    const now   = new Date().toLocaleTimeString();
+
+    const popup = document.createElement('div');
+    popup.className = 'notif-popup';
+
+    popup.innerHTML = `
+        <div class="notif-body">
+            <div class="notif-top">
+                <div style="display:flex;align-items:center;gap:8px">
+                    <div class="notif-app">
+                        <div class="notif-app-icon"><img src="logo.png" alt="LoungSy.AI"></div>
+                        LoungSy.AI
+                    </div>
+                    <span class="notif-time">${now}</span>
+                </div>
+                <button class="notif-close" onclick="dismissNotif(this)">✕</button>
+            </div>
+            <div class="notif-badge ${a.notifBadge}">${a.icon} ${a.type}</div>
+            <div class="notif-title" style="color:${a.acColor}">${a.title}</div>
+            <div class="notif-desc">📍 ${a.camName} &nbsp;·&nbsp; ${a.desc.slice(0, 80)}…</div>
+            <div class="notif-actions">
+                <button class="notif-btn primary" style="background:${a.btnGrad}">${a.btnMain}</button>
+                <button class="notif-btn secondary" onclick="dismissNotif(this)">${a.btnDim}</button>
+            </div>
+        </div>`;
+
+    stack.appendChild(popup);
+
+    // Limit stack to 3 visible
+    const all = stack.querySelectorAll('.notif-popup');
+    if (all.length > 3) dismissNotif(all[0].querySelector('.notif-close'));
+
+    // Auto-dismiss after 6s
+    const tid = setTimeout(() => dismissNotif(popup), 6000);
+    popup._tid = tid;
+}
+
+function dismissNotif(el) {
+    // el can be the popup itself or a button inside it
+    const popup = el.closest ? el.closest('.notif-popup') : el;
+    if (!popup || popup.classList.contains('hiding')) return;
+    clearTimeout(popup._tid);
+    popup.classList.add('hiding');
+    setTimeout(() => popup.remove(), 320);
+}
+</script>
+</body>
+</html>
